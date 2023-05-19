@@ -1,0 +1,23 @@
+﻿using System;
+using System.Linq;
+using System.IO;
+
+namespace task_compress
+{
+	class Program
+	{
+		static void Main(string[] args)
+		{
+			string prefix = @"..\..\data-files\";
+			foreach (var filename in new []{ "program.cs", "lotr.txt", "img.bmp" })
+			{
+				var data = File.ReadAllBytes(prefix + filename);
+				var compressed = Compressor.Compress(data);
+				File.WriteAllBytes(prefix + filename + ".compessed", compressed);
+				Console.WriteLine($"'{filename}' {data.Length:n0} B to {compressed.Length:n0} B");
+				if (!Enumerable.SequenceEqual(Compressor.Decompress(compressed), data))
+					Console.WriteLine("Decompression error");
+			}
+		}
+	}
+}
