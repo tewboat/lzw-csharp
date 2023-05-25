@@ -1,35 +1,70 @@
 ﻿namespace LZW;
 
+using System.Collections.Generic;
+
 public static class Compressor
 {
-    private static int[] DataToIds(byte[] data, int maxDictionarySize)
+
+    public static byte[] Compress(byte[] data, int maxDictionarySize = 4096)
     {
+        var output = new List<byte> { 0 };
+        int idBits = 8, currBit = 0;
+
         var root = CompressionTrie.InitRoot();
         var currentNode = root;
         var code = 256;
-        var ids = new List<int>();
-        foreach (var b in data)
+
+        foreach (var @byte in data)
         {
-            if (currentNode.Next.TryGetValue(b, out var nextNode))
+            if (currentNode.Next.TryGetValue(@byte, out var nextNode))
             {
                 currentNode = nextNode;
                 continue;
             }
 
             if (code < maxDictionarySize)
-                currentNode.Next[b] = CompressionTrie.InitTree(code++);
-            ids.Add(currentNode.Code);
-            currentNode = root.Next[b];
+                currentNode.Next[@byte] = CompressionTrie.InitTree(code++);
+            if (code >= 1 << idBits)
+                idBits++;
+            for (var i = idBits - 1; i >= 0; i--)
+            {
+                var bit = ((currentNode.Code & 1 << i) == 0 ? 0 : 1);
+                output[^1] |= (byte)(bit << (7 - currBit));
+                currBit += 1;
+                if (currBit >= 8)
+                {
+                    output.Add(0);
+                    currBit %= 8;
+                }
+            }
+
+            currentNode = root.Next[@byte];
         }
 
-        ids.Add(currentNode.Code);
+        if (code >= 1 << idBits)
+            idBits++;
+        for (var i = idBits - 1; i >= 0; i--)
+        {
+            var bit = (currentNode.Code & 1 << i) == 0 ? 0 : 1;
+            output[^1] |= (byte)(bit << (7 - currBit));
+            currBit += 1;
+            if (currBit >= 8)
+            {
+                output.Add(0);
+                currBit %= 8;
+            }
+        }
 
-        return ids.ToArray();
+        return output.ToArray();
     }
 
-    private static byte[] IdsToData(int[] ids)
+    public static byte[] Decompress(byte[] compressedData, int dictionarySize = 4096)
     {
+        var bitReader = new BitReader(new MemoryStream(compressedData));
+        bitReader.BitsInChunk = 9;
+
         var data = new List<byte>();
+
         var root = DecompressionTrie.InitRoot();
         var dict = new List<DecompressionTrie>(256);
         var code = 256;
@@ -38,13 +73,14 @@ public static class Compressor
             dict.Add(node);
 
         var currentNode = root;
-        foreach (var id in ids)
+        var id = bitReader.Read();
+        while (id != -1)
         {
             if (id >= dict.Count)
             {
                 var node = currentNode;
-                while (node?.Parent != root)
-                    node = node?.Parent;
+                while (node.Parent != root)
+                    node = node.Parent;
                 var extensionNode = DecompressionTrie.InitTree(currentNode, node.Byte);
                 currentNode.Next[node.Byte] = extensionNode;
                 while (dict.Count <= id)
@@ -63,7 +99,7 @@ public static class Compressor
             str.Reverse();
             data.AddRange(str);
 
-            if (currentNode != root)
+            if (currentNode != root && code < dictionarySize)
             {
                 var nextNode = DecompressionTrie.InitTree(currentNode, str[0]);
                 currentNode.Next[str[0]] = nextNode;
@@ -74,46 +110,13 @@ public static class Compressor
             }
 
             currentNode = dict[id];
+
+            if (code + 2 >= 1 << bitReader.BitsInChunk)
+                bitReader.BitsInChunk++;
+
+            id = bitReader.Read();
         }
 
         return data.ToArray();
-    }
-
-    public static byte[] Compress(byte[] data, int maxDictionarySize = 4096)
-    {
-        var ids = DataToIds(data, maxDictionarySize);
-        var output = new List<byte>();
-        int idBits = 8, currBit = 0;
-        for (var id = 0; id < ids.Length; id++)
-        {
-            var newSize = (currBit + idBits + 7) / 8 + 8;
-            output.AddRange(new byte[newSize - output.Count]);
-            var bytes = BitConverter.GetBytes((ulong) ids[id] << currBit % 8);
-            for (var k = 0; k < 2 + idBits / 8; k++)
-                output[currBit / 8 + k] |= bytes[k];
-            currBit += idBits;
-            if (256 + id >= 1 << idBits)
-                idBits++;
-        }
-
-        output.RemoveRange((currBit + 7) / 8, 8);
-        return output.ToArray();
-    }
-
-    public static byte[] Decompress(byte[] data)
-    {
-        var ids = new List<int>();
-        int idBits = 8, currBit = 0, lastBit = data.Length * 8;
-        data = data.Concat(new byte[8]).ToArray();
-        for (var id = 0; currBit + idBits <= lastBit; id++)
-        {
-            var x = BitConverter.ToUInt64(data, currBit / 8);
-            ids.Add((int) (x >> currBit % 8) & (1 << idBits) - 1);
-            currBit += idBits;
-            if (256 + id >= 1 << idBits)
-                idBits++;
-        }
-
-        return IdsToData(ids.ToArray());
     }
 }

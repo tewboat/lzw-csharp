@@ -32,6 +32,7 @@ internal sealed class StatisticsCommand : Command<StatisticsCommand.Settings>
             stopwatch.Stop();
             Console.WriteLine($"{i,17} | {(float) data.Length / compressed.Length,16} | {stopwatch.ElapsedMilliseconds,8}");
             GC.EndNoGCRegion();
+            GC.Collect();
         }
 
         return 0;
