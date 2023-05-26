@@ -15,7 +15,8 @@ internal sealed class DecompressCommand : Command<DecompressCommand.Settings>
     public override int Execute(CommandContext context, Settings settings)
     {
         var data = File.ReadAllBytes(settings.FilePath);
-        var decompessed = Compressor.Decompress(data);
+        var size = BitConverter.ToInt32(data, 0);
+        var decompessed = Compressor.Decompress(data.Skip(4).ToArray(), size);
         File.WriteAllBytes(settings.OutputFilePath, decompessed);
         Console.WriteLine($"'{settings.FilePath}' successfully decompressed!");
 

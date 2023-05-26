@@ -16,8 +16,9 @@ internal sealed class CompressCommand : Command<CompressCommand.Settings>
     public override int Execute(CommandContext context, Settings settings)
     {
         var data = File.ReadAllBytes(settings.FilePath);
-        var compressed = Compressor.Compress(data, settings.DictionarySize ?? 4096);
-        File.WriteAllBytes(settings.OutputFilePath ?? settings.FilePath + ".compessed", compressed);
+        var dictionarySize = settings.DictionarySize ?? 4096;
+        var compressed = Compressor.Compress(data, dictionarySize);
+        File.WriteAllBytes(settings.OutputFilePath ?? settings.FilePath + ".compessed", BitConverter.GetBytes(dictionarySize).Concat(compressed).ToArray());
         Console.WriteLine($"'{settings.FilePath}' {data.Length:n0} B to {compressed.Length:n0} B");
 
         return 0;

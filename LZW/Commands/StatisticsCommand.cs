@@ -26,13 +26,23 @@ internal sealed class StatisticsCommand : Command<StatisticsCommand.Settings>
 
         for (var i = 512; i < 1 << 20; i *= 2)
         {
-            GC.TryStartNoGCRegion(100000000);
-            var stopwatch = Stopwatch.StartNew();
-            var compressed = Compressor.Compress(data, i);
-            stopwatch.Stop();
-            Console.WriteLine($"{i,17} | {(float) data.Length / compressed.Length,16} | {stopwatch.ElapsedMilliseconds,8}");
-            GC.EndNoGCRegion();
-            GC.Collect();
+            const int repetitionsCount = 50;
+            var totalTime = 0.0;
+            var compressedSize = 0;
+            for (var j = 0; j < repetitionsCount; j++)
+            {
+                GC.TryStartNoGCRegion(100000000);
+                var stopwatch = Stopwatch.StartNew();
+                var compressed = Compressor.Compress(data, i);
+                compressedSize = compressed.Length;
+                stopwatch.Stop();
+                totalTime += stopwatch.ElapsedMilliseconds;
+                GC.EndNoGCRegion();
+                GC.Collect();
+            }
+            
+            Console.WriteLine(
+                $"{i,17} | {(float)data.Length / compressedSize,16} | {totalTime / repetitionsCount,8}");
         }
 
         return 0;
